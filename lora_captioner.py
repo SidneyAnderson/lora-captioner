@@ -619,6 +619,9 @@ def main():
 
     args = parser.parse_args()
 
+    # Track whether XAI_API_KEY was already present before loading .env files
+    key_existed_before_env = "XAI_API_KEY" in os.environ
+
     # Load .env files (in order of priority)
     # 1. Current working directory (most common when running from the project root)
     # 2. Directory where the script lives
@@ -669,6 +672,17 @@ def main():
     # Get API key for Grok
     api_key = args.api_key or os.environ.get("XAI_API_KEY")
 
+    # Determine where the API key came from (for nice startup message)
+    if args.api_key:
+        api_key_source = "command line (--api-key)"
+    elif "XAI_API_KEY" in os.environ:
+        if key_existed_before_env:
+            api_key_source = "environment variable"
+        else:
+            api_key_source = ".env file"
+    else:
+        api_key_source = None
+
     if args.backend == "grok":
         if not api_key and not args.dry_run:
             print("ERROR: No XAI_API_KEY found for Grok backend.")
@@ -681,6 +695,11 @@ def main():
             print("")
             print("Get your key here: https://console.x.ai/")
             sys.exit(1)
+
+        # Nice startup message for Grok users
+        if not args.dry_run:
+            print(f"✓ Using Grok backend (API key loaded from {api_key_source})")
+
         client = OpenAI(
             api_key=api_key,
             base_url="https://api.x.ai/v1",

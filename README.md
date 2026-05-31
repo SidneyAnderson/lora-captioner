@@ -20,6 +20,8 @@ cd lora-captioner
    XAI_API_KEY=your_key_here
    ```
 
+When using the Grok backend, the script will print a confirmation message on startup showing where it loaded the API key from (`.env file`, environment variable, or command line).
+
 Get your free API key at: [https://console.x.ai/](https://console.x.ai/)
 
 ---
