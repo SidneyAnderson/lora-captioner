@@ -76,3 +76,27 @@ Most generic image captioning tools are not optimized for **character LoRA train
 ## License
 
 MIT (or whatever you prefer)
+
+## Quick Start (Recommended)
+
+After cloning the repository, run the installer:
+
+```bash
+git clone https://github.com/yourusername/lora-captioner.git
+cd lora-captioner
+chmod +x install.sh
+./install.sh
+```
+
+This will:
+- Check for Python 3 and install it via `apt` if missing (Ubuntu/Debian/WSL)
+- Create a virtual environment (`.venv`)
+- Install all required dependencies
+
+After installation, activate the environment and run the tool:
+
+```bash
+source .venv/bin/activate
+python lora_captioner.py --help
+```
+
