@@ -8,6 +8,20 @@ cd lora-captioner
 ./install.sh
 ```
 
+### API Key Setup (for Grok)
+
+1. Copy the example file:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` and add your xAI API key:
+   ```env
+   XAI_API_KEY=your_key_here
+   ```
+
+Get your free API key at: [https://console.x.ai/](https://console.x.ai/)
+
 ---
 
 A powerful interactive tool for generating high-quality image descriptions/captions for **LoRA training** using vision-language models.
@@ -45,6 +59,28 @@ After running the installer, activate the environment:
 source .venv/bin/activate
 python lora_captioner.py --help
 ```
+
+### Setting up your Grok (xAI) API Key
+
+The script supports multiple ways to provide the API key:
+
+1. **Recommended**: Create a `.env` file in the project root
+   ```bash
+   cp .env.example .env
+   # Then edit .env and add your key
+   ```
+
+2. Environment variable:
+   ```bash
+   export XAI_API_KEY=your_key_here
+   ```
+
+3. Command line flag:
+   ```bash
+   python lora_captioner.py --backend grok --api-key your_key_here ...
+   ```
+
+> **Note**: The `.env` file is ignored by git (see `.gitignore`). Never commit your real API key.
 
 ## Usage
 

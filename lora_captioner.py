@@ -599,7 +599,7 @@ def main():
 
     # General options (kept compatible with previous script)
     parser.add_argument("-f", "--folder", default=".", help="Folder containing images")
-    parser.add_argument("--api-key", help="xAI API key (or set XAI_API_KEY / via .env)")
+    parser.add_argument("--api-key", help="xAI API key (recommended: put in .env file as XAI_API_KEY)")
     parser.add_argument("--max-side", type=int, default=1280,
                         help="Resize longest side before sending to the vision model (0 = no resize)")
     parser.add_argument("--overwrite", "-o", action="store_true",
@@ -619,10 +619,17 @@ def main():
 
     args = parser.parse_args()
 
-    # Load .env files
-    folder = Path(args.folder).resolve()
+    # Load .env files (in order of priority)
+    # 1. Current working directory (most common when running from the project root)
+    # 2. Directory where the script lives
+    # 3. The images folder passed via --folder
+    cwd = Path.cwd()
     script_dir = Path(__file__).resolve().parent
-    load_env_file(folder / ".env") or load_env_file(script_dir / ".env")
+    folder = Path(args.folder).resolve()
+
+    load_env_file(cwd / ".env") or \
+    load_env_file(script_dir / ".env") or \
+    load_env_file(folder / ".env")
 
     # Resolve vLLM URL early (with auto-detection support)
     vllm_base_url = None
@@ -665,7 +672,14 @@ def main():
     if args.backend == "grok":
         if not api_key and not args.dry_run:
             print("ERROR: No XAI_API_KEY found for Grok backend.")
-            print("Set it via .env file, environment variable, or --api-key")
+            print("")
+            print("How to set your API key:")
+            print("  1. Copy .env.example → .env")
+            print("  2. Edit .env and add your key: XAI_API_KEY=sk-...")
+            print("  3. Or set it as environment variable: export XAI_API_KEY=your_key")
+            print("  4. Or pass it directly: --api-key your_key")
+            print("")
+            print("Get your key here: https://console.x.ai/")
             sys.exit(1)
         client = OpenAI(
             api_key=api_key,
