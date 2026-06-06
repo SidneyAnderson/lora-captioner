@@ -101,6 +101,20 @@ python lora_captioner.py --backend grok --folder /path/to/images --skip-qa
 
 The wizard will automatically appear for Ollama and vLLM if you don't specify `--model`.
 
+### WSL image paths
+
+When running from WSL, prefer the native Linux path:
+
+```bash
+python lora_captioner.py --folder /home/sid/Vision-ComfyUI/output/Character_Sheet/Red_Fairy_HH/PASSED
+```
+
+Windows-style WSL UNC paths also work, but quote them so Bash preserves the backslashes:
+
+```bash
+python lora_captioner.py --folder '\\wsl.localhost\Ubuntu-22.04\home\sid\Vision-ComfyUI\output\Character_Sheet\Red_Fairy_HH\PASSED'
+```
+
 ### Skip the wizard
 
 ```bash

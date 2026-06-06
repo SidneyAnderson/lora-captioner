@@ -103,6 +103,125 @@ def load_env_file(env_path: Path) -> bool:
     return loaded
 
 
+def _translate_windows_path(path_arg: str) -> Optional[Path]:
+    r"""
+    Translate common Windows path forms into paths usable from WSL/Linux.
+
+    Handles:
+    - \\wsl.localhost\Distro\home\user\images -> /home/user/images
+    - //wsl.localhost/Distro/home/user/images -> /home/user/images
+    - C:\Users\name\images -> /mnt/c/Users/name/images
+    """
+    normalized = path_arg.replace("\\", "/")
+    lowered = normalized.lower()
+
+    for prefix in ("//wsl.localhost/", "//wsl$/", "/wsl.localhost/", "/wsl$/"):
+        if lowered.startswith(prefix):
+            rest = normalized[len(prefix):]
+            parts = [part for part in rest.split("/") if part]
+            if len(parts) >= 2:
+                return Path("/" + "/".join(parts[1:]))
+
+    if (
+        len(path_arg) >= 3
+        and path_arg[0].isalpha()
+        and path_arg[1] == ":"
+        and path_arg[2] in ("\\", "/")
+    ):
+        drive = path_arg[0].lower()
+        rest = path_arg[2:].replace("\\", "/").lstrip("/")
+        return Path("/mnt") / drive / rest
+
+    return None
+
+
+def _recover_existing_path_from_compact(root: Path, compact_path: str, depth: int = 0) -> Optional[Path]:
+    if not compact_path:
+        return root if root.is_dir() else None
+    if depth > 64 or not root.is_dir():
+        return None
+
+    try:
+        entries = sorted(root.iterdir(), key=lambda p: len(p.name), reverse=True)
+    except OSError:
+        return None
+
+    compact_lower = compact_path.lower()
+    for entry in entries:
+        if not entry.is_dir():
+            continue
+        if compact_lower.startswith(entry.name.lower()):
+            recovered = _recover_existing_path_from_compact(
+                entry,
+                compact_path[len(entry.name):],
+                depth + 1,
+            )
+            if recovered:
+                return recovered
+
+    return None
+
+
+def _recover_shell_stripped_wsl_unc_path(path_arg: str) -> Optional[Path]:
+    r"""
+    Bash removes unquoted backslashes, so a command like:
+      -f \\wsl.localhost\Ubuntu-22.04\home\sid\images
+
+    reaches Python as one compact string with most separators missing. If the
+    target directory already exists, recover it by matching path components.
+    """
+    compact = path_arg.replace("\\", "").replace("/", "")
+    compact_lower = compact.lower()
+
+    for host_prefix in ("wsl.localhost", "wsl$"):
+        if not compact_lower.startswith(host_prefix):
+            continue
+
+        rest = compact[len(host_prefix):]
+        distro = os.environ.get("WSL_DISTRO_NAME")
+        if distro and rest.lower().startswith(distro.lower()):
+            rest = rest[len(distro):]
+
+        # If the distro name was not available or did not match, scan for the
+        # first suffix that maps to a real absolute path such as /home/... .
+        for index in range(len(rest)):
+            recovered = _recover_existing_path_from_compact(Path("/"), rest[index:])
+            if recovered:
+                return recovered
+
+    return None
+
+
+def resolve_cli_path(path_arg: str) -> Path:
+    translated = _translate_windows_path(path_arg)
+    if translated:
+        return translated.expanduser().resolve()
+
+    recovered = _recover_shell_stripped_wsl_unc_path(path_arg)
+    if recovered:
+        return recovered.expanduser().resolve()
+
+    return Path(path_arg).expanduser().resolve()
+
+
+def print_folder_error(raw_folder: str, folder: Path) -> None:
+    print("ERROR: Image folder does not exist.")
+    print(f"  Input:    {raw_folder}")
+    print(f"  Resolved: {folder}")
+
+    compact = raw_folder.replace("\\", "").replace("/", "").lower()
+    if compact.startswith(("wsl.localhost", "wsl$")):
+        home = Path.home()
+        distro = os.environ.get("WSL_DISTRO_NAME", "Ubuntu-22.04")
+        print("")
+        print("This looks like a Windows WSL UNC path that Bash may have stripped.")
+        print("From WSL, prefer the native Linux path:")
+        print(f"  python3 lora_captioner.py -f {home}/path/to/images")
+        print("")
+        print("Or quote the UNC path so Bash preserves the backslashes:")
+        print(f"  python3 lora_captioner.py -f '\\\\wsl.localhost\\{distro}\\home\\{home.name}\\path\\to\\images'")
+
+
 def get_vllm_base_url(vllm_ip: Optional[str] = None, default_url: str = "http://localhost:8000/v1") -> str:
     """
     Resolve the correct base URL for vLLM.
@@ -628,11 +747,20 @@ def main():
     # 3. The images folder passed via --folder
     cwd = Path.cwd()
     script_dir = Path(__file__).resolve().parent
-    folder = Path(args.folder).resolve()
+    folder = resolve_cli_path(args.folder)
 
-    load_env_file(cwd / ".env") or \
-    load_env_file(script_dir / ".env") or \
-    load_env_file(folder / ".env")
+    loaded_env = load_env_file(cwd / ".env") or load_env_file(script_dir / ".env")
+    if not loaded_env and folder.exists():
+        load_env_file(folder / ".env")
+
+    if not folder.exists():
+        print_folder_error(args.folder, folder)
+        sys.exit(1)
+    if not folder.is_dir():
+        print("ERROR: --folder must point to a directory.")
+        print(f"  Input:    {args.folder}")
+        print(f"  Resolved: {folder}")
+        sys.exit(1)
 
     # Resolve vLLM URL early (with auto-detection support)
     vllm_base_url = None
@@ -660,7 +788,7 @@ def main():
 
     # Build final system prompt
     if args.system_prompt_file:
-        base_prompt = Path(args.system_prompt_file).read_text(encoding="utf-8").strip()
+        base_prompt = resolve_cli_path(args.system_prompt_file).read_text(encoding="utf-8").strip()
     else:
         base_prompt = DEFAULT_SYSTEM_PROMPT
 
